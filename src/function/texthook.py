@@ -10,6 +10,7 @@ import re
 
 from function.dedup import Deduplicator
 from function.config import MIN_LENGTH, SIMILARITY, STABLE_THRESHOLD, MAX_SAVED_SENTENCES
+from function.livecaptions import get_live_captions_window, lc_detect
 
 last_full_text = ""
 deduper=Deduplicator()
@@ -118,10 +119,11 @@ def is_incomplete_sentence(s: str) -> bool:
     is_chinese = bool(re.search(r'[\u4e00-\u9fff]', s))
     # --for Chinese lossely judging--
     if is_chinese:
-        # allow '，' for Chinese, but not for non-Chinese
-        if s[-1] in ',，；;':
+        # Live Captions often emits long Chinese phrases at a comma, so accept
+        # both sentence-ending and phrase-ending Chinese punctuation.
+        if s[-1] in '，。！？；,.!?;':
             return False
-        
+
         return True
 
     #--for non-Chinese--
@@ -135,57 +137,59 @@ def is_incomplete_sentence(s: str) -> bool:
 
 def is_last_line_of_file(current_j: int, total_lines: int) -> bool:
     """if the sentence is in the last 3 lines of the file, consider it as important and keep it"""
-    return current_j >= total_lines - 3   
-
-def lc_detect() -> bool:
-    try:
-        auto.SetGlobalSearchTimeout(0.5)
-        
-        desktop = auto.GetRootControl()
-        captions_window = desktop.Control(
-            searchDepth=1,
-            ClassName="LiveCaptionsDesktopWindow",
-            timeout = 0.2
-        )
+    return current_j >= total_lines - 3
 
 
-        if captions_window.Exists(0):
-            print ("Live Captions Found")
-            return True
-        else:
-            print(f"Live Captions Not Found")
-            return False
-
-    except Exception as e:
-        print(f"Live Captions Not Found: {str(e)[:50]}...")
-        return False
-
+def get_captions_scrollviewer():
+    """Get a fresh UI Automation handle for the live caption text."""
+    captions_window = get_live_captions_window()
+    return captions_window.Control(
+        searchDepth=5,
+        AutomationId="CaptionsScrollViewer",
+        ClassName="ScrollViewer",
+    )
 
 async def hook(filename, exit_event):
     global last_full_text, current_sentences
+
+    # A single dashboard can now start multiple recording sessions. Do not let
+    # captions from an earlier session affect the next session's deduplication.
+    last_full_text = ""
+    current_sentences = {}
+    save.saved_captions.clear()
     seen_sentences = set()  # for quick lookup of already saved sentences
 
     try:
         if not lc_detect():
             return False
 
-        desktop = auto.GetRootControl()
-        captions_window = desktop.Control(
-            searchDepth=1,
-            ClassName="LiveCaptionsDesktopWindow"
-        )
         await asyncio.sleep(1)  # Wait for the window not to be empty
-        captions_scrollviewer = captions_window.Control(
-            searchDepth=5,
-            AutomationId="CaptionsScrollViewer",
-            ClassName="ScrollViewer"
-        )
+        captions_scrollviewer = get_captions_scrollviewer()
+        consecutive_ui_errors = 0
 
         print("Start capture...")
         print(f"Settings: STABLE_THRESHOLD={STABLE_THRESHOLD}, MIN_LENGTH={MIN_LENGTH}, SIMILARITY={SIMILARITY}")
 
         while not exit_event.is_set():
-            current_text = captions_scrollviewer.Name.strip()
+            try:
+                current_text = captions_scrollviewer.Name.strip()
+                if consecutive_ui_errors:
+                    print("[UIA] Live Captions connection recovered")
+                    consecutive_ui_errors = 0
+            except Exception as exc:
+                # Live Captions rebuilds its XAML controls from time to time.
+                # Existing UIA handles can then fail with transient COM errors
+                # such as 0x80040201. Reacquire the control instead of ending
+                # the recording session.
+                consecutive_ui_errors += 1
+                if consecutive_ui_errors == 1 or consecutive_ui_errors % 10 == 0:
+                    print(
+                        "[UIA RETRY] Unable to read Live Captions; "
+                        f"reconnecting (attempt {consecutive_ui_errors}): {exc}"
+                    )
+                captions_scrollviewer = get_captions_scrollviewer()
+                await asyncio.sleep(0.5)
+                continue
 
             if not current_text:
                 await asyncio.sleep(0.5)  

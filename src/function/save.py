@@ -9,9 +9,16 @@ from difflib import SequenceMatcher
 import re
 from function.transformation import word_to_number
 
-file_handle=None
 saved_captions: list[tuple[float, str]] = [] # time, caption
 save_dir = ""
+
+
+def get_default_save_dir() -> str:
+    """Return the executable directory, or the project root when run as source."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 def normalize_sentence(s: str) -> str:
     s = s.strip()
@@ -31,27 +38,46 @@ def similarity_ratio(s1: str, s2: str) -> float:
     norm2 = normalize_sentence(s2)
     return SequenceMatcher(None, norm1, norm2).ratio()
 
-def choose_save_dir():
+def choose_save_dir(parent=None):
     global save_dir
     
     timestamp = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())  
 
     if not save_dir:
-        root = tk.Tk()
-        root.withdraw()  
+        dialog_parent = parent
+        owns_root = dialog_parent is None
+        if owns_root:
+            dialog_parent = tk.Tk()
+            dialog_parent.withdraw()
+
         save_dir = filedialog.askdirectory(
-            title="choose direction",
-            initialdir=os.path.expanduser("~")  
+            title="选择字幕保存目录",
+            initialdir=get_default_save_dir(),
+            parent=dialog_parent,
         )
-        root.destroy()  
+        if owns_root:
+            dialog_parent.destroy()
 
         if not save_dir:
-            save_dir = os.path.expanduser("~/Documents/captions")
+            save_dir = get_default_save_dir()
             os.makedirs(save_dir, exist_ok=True)
     
     filename = os.path.join(save_dir, f"{timestamp}_captions.txt")
+    suffix = 2
+    while os.path.exists(filename):
+        filename = os.path.join(save_dir, f"{timestamp}_captions_{suffix}.txt")
+        suffix += 1
     
     return filename
+
+
+def prepare_output_file(filename: str) -> None:
+    """Create the selected output file so it can be opened immediately."""
+    parent_dir = os.path.dirname(os.path.abspath(filename))
+    os.makedirs(parent_dir, exist_ok=True)
+    with open(filename, "a", encoding="utf-8"):
+        pass
+
 
 async def save_replace_txt(filename,old_caption: tuple[float, str], new_caption: tuple[float, str]):
     ''' Replace old caption with new caption '''
@@ -75,11 +101,6 @@ async def save_replace_txt(filename,old_caption: tuple[float, str], new_caption:
 
 async def save_txt(filename,new_caption: tuple[float, str]):
     ''' Add new caption '''
-
-    global file_handle
-    if file_handle is None:
-        file_handle = await aiofiles.open(filename, "a+", encoding="utf-8")
-    
     t, cap = new_caption
     t_formatted = time.strftime("%H:%M:%S", time.localtime(t))
     
@@ -88,7 +109,6 @@ async def save_txt(filename,new_caption: tuple[float, str]):
         await f.write(f"[{t_formatted}] {cap}\n")
 
 async def close_file():
-    global file_handle
-    if file_handle is not None:
-        await file_handle.close()
-        file_handle = None
+    # Kept as part of the capture lifecycle API. Writes use scoped handles, so
+    # there is no persistent file handle to close.
+    return None

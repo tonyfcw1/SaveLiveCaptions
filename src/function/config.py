@@ -18,3 +18,14 @@ MIN_LENGTH=10
 # WHEN TEXTHOOKING the similarity threshold for considering two sentences as similar 
 # default is 0.85, meaning sentences with similarity above 0.85 will be considered similar
 SIMILARITY=0.85
+
+# Start Windows Live Captions automatically when it is not already open.
+LIVE_CAPTIONS_START_TIMEOUT = 15.0
+
+# Windows always starts Live Captions with microphone audio disabled. The app
+# will try to enable Settings > Preferences > Include microphone audio after it
+# launches Live Captions. Set this to False to keep the Windows default.
+AUTO_ENABLE_MICROPHONE = True
+
+# Close Windows Live Captions when this application exits.
+CLOSE_LIVE_CAPTIONS_ON_EXIT = True

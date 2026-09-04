@@ -9,6 +9,7 @@
 - ✨Save live captions to a text file.
 - 😃Minimalist floating dashboard.
 - **😎Customizable save options. (save location and quality option in `config.py`)**
+- Automatically opens Windows Live Captions when needed and tries to include microphone audio.
 
 ###  Installation
 ### Option 1: Quick Start (Executable)
@@ -38,15 +39,19 @@ If you prefer to run the code directly, follow these steps in your bash/PowerShe
 
 ---
 
-1. Before you open this application, make sure you already **open the live captions on Windows** (or it will exit automatically). Then double click the `SaveLiveCaptions.exe`. A small dashboard will appear in the top-left corner of your screen. You can drag the background to move this window.
+1. Double click `SaveLiveCaptions.exe`. If Windows Live Captions is not open, the tool starts it through PowerShell and waits for it to become ready. It also tries to enable **Settings > Preferences > Include microphone audio**. A small dashboard will then appear in the top-left corner of your screen. You can drag the background to move this window.
 
-![Dashboard Preview](./assets/dashboard.png)  
+   > Windows does not remember the microphone option and turns it off whenever Live Captions starts. If automatic enablement is unavailable on your Windows build, the tool shows a reminder so you can enable it manually.
 
-2. The **● (Circle)**  button is "start to save captions" and the **■ (Square)** button is "stop and exit the application". 
+2. The dashboard has one recording button. Select **Start recording** to begin, then select the same button again when it changes to **Stop recording**. Stopping saves and cleans the current transcript without closing the dashboard, so another recording can be started immediately.
 
-3. **Start saving:** When you click the circle button, a file dialog will open to choose a save location. If you don't choose the direction, the default location is `~/Documents/captions`. 
+   The current transcript filename is shown in the dashboard. Click the filename to open the text file, or select **Open folder** to locate it in File Explorer. The link remains available after recording stops.
 
-4. **Stop and exit:** When you click the square button, it stops and exit the application. You can find your captions file `YYYY-MM-DD_HH-MM-SS_captions.txt` in the chosen location like following.
+3. **Start saving:** When you click the circle button, a file dialog will open at the executable's directory. If you cancel the dialog, the captions file is saved beside the executable. When running from source, the project root is used instead.
+
+4. **Stop or exit:** Select **Stop recording** to finish the current transcript. Use the **×** button or press **Esc** to exit; an active recording is saved before the dashboard closes, and Windows Live Captions is closed with it by default. You can find the captions file `YYYY-MM-DD_HH-MM-SS_captions.txt` in the chosen location.
+
+   Set `CLOSE_LIVE_CAPTIONS_ON_EXIT = False` in `src/function/config.py` if you prefer to leave Windows Live Captions running after this tool exits.
 
 ![Captions File Example](./assets/captionsFile.png)
 
